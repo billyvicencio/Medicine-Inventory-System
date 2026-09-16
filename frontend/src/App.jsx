@@ -1,14 +1,405 @@
-import { createContext, useContext, useEffect, useState } from 'react'
-import { Link, Navigate, NavLink, Route, Routes, useNavigate, useParams } from 'react-router-dom'
+import { createContext, useContext, useEffect, useState } from "react";
+import {
+  Link,
+  Navigate,
+  NavLink,
+  Route,
+  Routes,
+  useNavigate,
+  useParams,
+} from "react-router-dom";
 
-const Auth = createContext(); const API = 'http://127.0.0.1:8000/api'
-async function request(path, options = {}) { let res; try { res = await fetch(API + path, { headers: { Accept: 'application/json', ...(options.body ? {'Content-Type':'application/json'} : {}) }, ...options }) } catch { throw new Error('Unable to reach the backend. Please ensure Laravel is running.') } const data = await res.json().catch(() => ({})); if (!res.ok) { const e = new Error(data.message || 'Request failed.'); e.errors = data.errors; throw e } return data }
-function Guard({children}) { return useContext(Auth).ok ? children : <Navigate to="/login" replace/> }
-function Shell({children}) { const {logout} = useContext(Auth); return <div className="shell"><header><Link className="brand" to="/home">MediStock</Link><nav><NavLink to="/home">Home</NavLink><NavLink to="/medicines">Medicines</NavLink><NavLink to="/medicines/add">Add Medicine</NavLink></nav><button className="text-button" onClick={logout}>Log out</button></header><main>{children}</main></div> }
-function Login() { const {ok,login} = useContext(Auth); const [username,setUsername]=useState(''); const [password,setPassword]=useState(''); const [error,setError]=useState(''); const [busy,setBusy]=useState(false); const nav=useNavigate(); if(ok)return <Navigate to="/home" replace/>; async function submit(e){e.preventDefault();setError('');setBusy(true);try{await login(username,password);nav('/home')}catch(err){setError(err.message)}finally{setBusy(false)}} return <div className="login"><form className="card login-card" onSubmit={submit}><span className="eyebrow">PHARMACY PORTAL</span><h1>Medicine inventory, simplified.</h1><p>Sign in to manage your medicine catalog.</p>{error&&<div className="notice error">{error}</div>}<label>Username<input value={username} onChange={e=>setUsername(e.target.value)} placeholder="pharmacist"/></label><label>Password<input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="??????"/></label><button className="primary" disabled={busy}>{busy?'Signing in?':'Login'}</button><small>Demo: pharmacist / med123</small></form></div> }
-function Home(){return <Shell><section className="hero"><span className="eyebrow">INVENTORY OVERVIEW</span><h1>Keep essential medicines in view.</h1><p>Check stock, add an item, and view a medicine record.</p><div className="actions"><Link to="/medicines">View Medicine List <b>?</b></Link><Link to="/medicines/add">Add Medicine <b>+</b></Link></div></section></Shell>}
-function List(){const [items,setItems]=useState([]),[error,setError]=useState(''),[loading,setLoading]=useState(true);useEffect(()=>{request('/medicines').then(setItems).catch(e=>setError(e.message)).finally(()=>setLoading(false))},[]);return <Shell><div className="heading"><div><span className="eyebrow">CATALOG</span><h1>Medicine List</h1><p>Live records from the inventory database.</p></div><Link className="secondary" to="/medicines/add">+ Add medicine</Link></div>{loading&&<div className="notice">Loading medicines?</div>}{error&&<div className="notice error">Unable to load medicines. {error}</div>}{!loading&&!error&&<div className="card table"><table><thead><tr><th>Brand Name</th><th>Category</th><th>Stock Quantity</th><th></th></tr></thead><tbody>{items.map(m=><tr key={m.id}><td><b>{m.brand_name}</b></td><td><span className="tag">{m.category}</span></td><td>{m.stock_quantity}</td><td><Link to={`/medicines/${m.id}`}>Details ?</Link></td></tr>)}</tbody></table>{!items.length&&<p>No medicines yet.</p>}</div>}<Link className="fab" to="/medicines/add">+</Link></Shell>}
-function Input({label,error,...props}){return <label>{label}<input {...props}/>{error&&<span className="field-error">{Array.isArray(error)?error[0]:error}</span>}</label>}
-function Add(){const [form,setForm]=useState({brand_name:'',category:'',stock_quantity:''}),[errors,setErrors]=useState({}),[message,setMessage]=useState(''),[busy,setBusy]=useState(false),nav=useNavigate();function check(){const e={};if(!form.brand_name.trim())e.brand_name='Brand Name is required.';if(!form.category.trim())e.category='Category is required.';if(form.stock_quantity===''||!/^\d+$/.test(form.stock_quantity))e.stock_quantity='Stock Quantity must be a valid non-negative number.';setErrors(e);return !Object.keys(e).length}async function submit(e){e.preventDefault();setMessage('');if(!check())return;setBusy(true);try{const m=await request('/medicines',{method:'POST',body:JSON.stringify({...form,stock_quantity:Number(form.stock_quantity)})});setMessage(`${m.brand_name} was added successfully.`);setTimeout(()=>nav('/medicines'),700)}catch(err){setMessage(err.message);setErrors(err.errors||{})}finally{setBusy(false)}}return <Shell><section className="card form"><span className="eyebrow">NEW RECORD</span><h1>Add Medicine</h1><p>Enter stock details for a medicine in the catalog.</p>{message&&<div className={`notice ${message.includes('successfully')?'success':'error'}`}>{message}</div>}<form onSubmit={submit}><Input label="Brand Name" value={form.brand_name} onChange={e=>setForm({...form,brand_name:e.target.value})} error={errors.brand_name} placeholder="e.g. Ibuprofen"/><Input label="Category" value={form.category} onChange={e=>setForm({...form,category:e.target.value})} error={errors.category} placeholder="e.g. Analgesic"/><Input label="Stock Quantity" type="number" min="0" value={form.stock_quantity} onChange={e=>setForm({...form,stock_quantity:e.target.value})} error={errors.stock_quantity} placeholder="e.g. 120"/><div className="form-actions"><Link to="/medicines">Cancel</Link><button className="primary" disabled={busy}>{busy?'Saving?':'Save Medicine'}</button></div></form></section></Shell>}
-function Details(){const {id}=useParams(),[m,setM]=useState(),[error,setError]=useState(''),nav=useNavigate();useEffect(()=>{request(`/medicines/${id}`).then(setM).catch(e=>setError(e.message))},[id]);return <Shell><button className="text-button" onClick={()=>nav(-1)}>? Back</button>{!m&&!error&&<div className="notice">Loading medicine details?</div>}{error&&<div className="notice error">Unable to load medicine details. {error}</div>}{m&&<article className="card details"><span className="eyebrow">MEDICINE DETAILS</span><h1>{m.brand_name}</h1><div><p><b>Category</b><br/>{m.category}</p><p><b>Stock Quantity</b><br/>{m.stock_quantity} units</p><p><b>Record ID</b><br/>#{m.id}</p></div></article>}</Shell>}
-export default function App(){const [ok,setOk]=useState(()=>sessionStorage.getItem('medicine-auth')==='true');async function login(username,password){await request('/login',{method:'POST',body:JSON.stringify({username,password})});sessionStorage.setItem('medicine-auth','true');setOk(true)}function logout(){sessionStorage.removeItem('medicine-auth');setOk(false)}return <Auth.Provider value={{ok,login,logout}}><Routes><Route path="/login" element={<Login/>}/><Route path="/" element={<Navigate to="/login" replace/>}/><Route path="/home" element={<Guard><Home/></Guard>}/><Route path="/medicines" element={<Guard><List/></Guard>}/><Route path="/medicines/add" element={<Guard><Add/></Guard>}/><Route path="/medicines/:id" element={<Guard><Details/></Guard>}/><Route path="*" element={<Navigate to="/login" replace/>}/></Routes></Auth.Provider>}
+const Auth = createContext();
+const API = "http://127.0.0.1:8000/api";
+async function request(path, options = {}) {
+  let res;
+  try {
+    res = await fetch(API + path, {
+      headers: {
+        Accept: "application/json",
+        ...(options.body ? { "Content-Type": "application/json" } : {}),
+      },
+      ...options,
+    });
+  } catch {
+    throw new Error(
+      "Unable to reach the backend. Please ensure Laravel is running."
+    );
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const e = new Error(data.message || "Request failed.");
+    e.errors = data.errors;
+    throw e;
+  }
+  return data;
+}
+function Guard({ children }) {
+  return useContext(Auth).ok ? children : <Navigate to="/login" replace />;
+}
+function Shell({ children }) {
+  const { logout } = useContext(Auth);
+  return (
+    <div className="shell">
+      <header>
+        <Link className="brand" to="/home">
+          MediStock
+        </Link>
+        <nav>
+          <NavLink to="/home">Home</NavLink>
+          <NavLink to="/medicines">Medicines</NavLink>
+          <NavLink to="/medicines/add">Add Medicine</NavLink>
+        </nav>
+        <button className="text-button" onClick={logout}>
+          Log out
+        </button>
+      </header>
+      <main>{children}</main>
+    </div>
+  );
+}
+function Login() {
+  const { ok, login } = useContext(Auth);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const nav = useNavigate();
+  if (ok) return <Navigate to="/home" replace />;
+  async function submit(e) {
+    e.preventDefault();
+    setError("");
+    setBusy(true);
+    try {
+      await login(username, password);
+      nav("/home");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="login">
+      <form className="card login-card" onSubmit={submit}>
+        <span className="eyebrow">PHARMACY PORTAL</span>
+        <h1>Medicine inventory, simplified.</h1>
+        <p>Sign in to manage your medicine catalog.</p>
+        {error && <div className="notice error">{error}</div>}
+        <label>
+          Username
+          <input
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="pharmacist"
+          />
+        </label>
+        <label>
+          Password
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="??????"
+          />
+        </label>
+        <button className="primary" disabled={busy}>
+          {busy ? "Signing in?" : "Login"}
+        </button>
+        <small>Demo: pharmacist / med123</small>
+      </form>
+    </div>
+  );
+}
+function Home() {
+  return (
+    <Shell>
+      <section className="hero">
+        <span className="eyebrow">INVENTORY OVERVIEW</span>
+        <h1>Keep essential medicines in view.</h1>
+        <p>Check stock, add an item, and view a medicine record.</p>
+        <div className="actions">
+          <Link to="/medicines">
+            View Medicine List <b>?</b>
+          </Link>
+          <Link to="/medicines/add">
+            Add Medicine <b>+</b>
+          </Link>
+        </div>
+      </section>
+    </Shell>
+  );
+}
+function List() {
+  const [items, setItems] = useState([]),
+    [error, setError] = useState(""),
+    [loading, setLoading] = useState(true);
+  useEffect(() => {
+    request("/medicines")
+      .then(setItems)
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+  return (
+    <Shell>
+      <div className="heading">
+        <div>
+          <span className="eyebrow">CATALOG</span>
+          <h1>Medicine List</h1>
+          <p>Live records from the inventory database.</p>
+        </div>
+        <Link className="secondary" to="/medicines/add">
+          + Add medicine
+        </Link>
+      </div>
+      {loading && <div className="notice">Loading medicines?</div>}
+      {error && (
+        <div className="notice error">Unable to load medicines. {error}</div>
+      )}
+      {!loading && !error && (
+        <div className="card table">
+          <table>
+            <thead>
+              <tr>
+                <th>Brand Name</th>
+                <th>Category</th>
+                <th>Stock Quantity</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((m) => (
+                <tr key={m.id}>
+                  <td>
+                    <b>{m.brand_name}</b>
+                  </td>
+                  <td>
+                    <span className="tag">{m.category}</span>
+                  </td>
+                  <td>{m.stock_quantity}</td>
+                  <td>
+                    <Link to={`/medicines/${m.id}`}>Details ?</Link>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {!items.length && <p>No medicines yet.</p>}
+        </div>
+      )}
+      <Link className="fab" to="/medicines/add">
+        +
+      </Link>
+    </Shell>
+  );
+}
+function Input({ label, error, ...props }) {
+  return (
+    <label>
+      {label}
+      <input {...props} />
+      {error && (
+        <span className="field-error">
+          {Array.isArray(error) ? error[0] : error}
+        </span>
+      )}
+    </label>
+  );
+}
+function Add() {
+  const [form, setForm] = useState({
+      brand_name: "",
+      category: "",
+      stock_quantity: "",
+    }),
+    [errors, setErrors] = useState({}),
+    [message, setMessage] = useState(""),
+    [busy, setBusy] = useState(false),
+    nav = useNavigate();
+  function check() {
+    const e = {};
+    if (!form.brand_name.trim()) e.brand_name = "Brand Name is required.";
+    if (!form.category.trim()) e.category = "Category is required.";
+    if (form.stock_quantity === "" || !/^\d+$/.test(form.stock_quantity))
+      e.stock_quantity = "Stock Quantity must be a valid non-negative number.";
+    setErrors(e);
+    return !Object.keys(e).length;
+  }
+  async function submit(e) {
+    e.preventDefault();
+    setMessage("");
+    if (!check()) return;
+    setBusy(true);
+    try {
+      const m = await request("/medicines", {
+        method: "POST",
+        body: JSON.stringify({
+          ...form,
+          stock_quantity: Number(form.stock_quantity),
+        }),
+      });
+      setMessage(`${m.brand_name} was added successfully.`);
+      setTimeout(() => nav("/medicines"), 700);
+    } catch (err) {
+      setMessage(err.message);
+      setErrors(err.errors || {});
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Shell>
+      <section className="card form">
+        <span className="eyebrow">NEW RECORD</span>
+        <h1>Add Medicine</h1>
+        <p>Enter stock details for a medicine in the catalog.</p>
+        {message && (
+          <div
+            className={`notice ${
+              message.includes("successfully") ? "success" : "error"
+            }`}
+          >
+            {message}
+          </div>
+        )}
+        <form onSubmit={submit}>
+          <Input
+            label="Brand Name"
+            value={form.brand_name}
+            onChange={(e) => setForm({ ...form, brand_name: e.target.value })}
+            error={errors.brand_name}
+            placeholder="e.g. Ibuprofen"
+          />
+          <Input
+            label="Category"
+            value={form.category}
+            onChange={(e) => setForm({ ...form, category: e.target.value })}
+            error={errors.category}
+            placeholder="e.g. Analgesic"
+          />
+          <Input
+            label="Stock Quantity"
+            type="number"
+            min="0"
+            value={form.stock_quantity}
+            onChange={(e) =>
+              setForm({ ...form, stock_quantity: e.target.value })
+            }
+            error={errors.stock_quantity}
+            placeholder="e.g. 120"
+          />
+          <div className="form-actions">
+            <Link to="/medicines">Cancel</Link>
+            <button className="primary" disabled={busy}>
+              {busy ? "Saving?" : "Save Medicine"}
+            </button>
+          </div>
+        </form>
+      </section>
+    </Shell>
+  );
+}
+function Details() {
+  const { id } = useParams(),
+    [m, setM] = useState(),
+    [error, setError] = useState(""),
+    nav = useNavigate();
+  useEffect(() => {
+    request(`/medicines/${id}`)
+      .then(setM)
+      .catch((e) => setError(e.message));
+  }, [id]);
+  return (
+    <Shell>
+      <button className="text-button" onClick={() => nav(-1)}>
+        ? Back
+      </button>
+      {!m && !error && <div className="notice">Loading medicine details?</div>}
+      {error && (
+        <div className="notice error">
+          Unable to load medicine details. {error}
+        </div>
+      )}
+      {m && (
+        <article className="card details">
+          <span className="eyebrow">MEDICINE DETAILS</span>
+          <h1>{m.brand_name}</h1>
+          <div>
+            <p>
+              <b>Category</b>
+              <br />
+              {m.category}
+            </p>
+            <p>
+              <b>Stock Quantity</b>
+              <br />
+              {m.stock_quantity} units
+            </p>
+            <p>
+              <b>Record ID</b>
+              <br />#{m.id}
+            </p>
+          </div>
+        </article>
+      )}
+    </Shell>
+  );
+}
+export default function App() {
+  const [ok, setOk] = useState(
+    () => sessionStorage.getItem("medicine-auth") === "true"
+  );
+  async function login(username, password) {
+    await request("/login", {
+      method: "POST",
+      body: JSON.stringify({ username, password }),
+    });
+    sessionStorage.setItem("medicine-auth", "true");
+    setOk(true);
+  }
+  function logout() {
+    sessionStorage.removeItem("medicine-auth");
+    setOk(false);
+  }
+  return (
+    <Auth.Provider value={{ ok, login, logout }}>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/" element={<Navigate to="/login" replace />} />
+        <Route
+          path="/home"
+          element={
+            <Guard>
+              <Home />
+            </Guard>
+          }
+        />
+        <Route
+          path="/medicines"
+          element={
+            <Guard>
+              <List />
+            </Guard>
+          }
+        />
+        <Route
+          path="/medicines/add"
+          element={
+            <Guard>
+              <Add />
+            </Guard>
+          }
+        />
+        <Route
+          path="/medicines/:id"
+          element={
+            <Guard>
+              <Details />
+            </Guard>
+          }
+        />
+        <Route path="*" element={<Navigate to="/login" replace />} />
+      </Routes>
+    </Auth.Provider>
+  );
+}
